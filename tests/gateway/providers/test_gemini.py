@@ -1285,6 +1285,41 @@ def test_gemini_chat_streaming_mixed_text_and_function_call_parts(parts):
     ]
 
 
+_MULTI_TEXT_PARTS = [{"text": "Hello, "}, {"text": "world."}]
+
+
+def test_gemini_chat_joins_multiple_text_parts():
+    config = EndpointConfig(**chat_config())
+    resp = GeminiAdapter.model_to_chat(_mixed_parts_response(_MULTI_TEXT_PARTS), config)
+
+    assert resp.choices[0].message.content == "Hello, world."
+    assert resp.choices[0].finish_reason == "stop"
+
+
+def test_gemini_chat_streaming_joins_multiple_text_parts():
+    config = EndpointConfig(**chat_config())
+    resp = GeminiAdapter.model_to_chat_streaming(_mixed_parts_response(_MULTI_TEXT_PARTS), config)
+
+    assert resp.choices[0].delta.content == "Hello, world."
+
+
+def test_gemini_completions_joins_multiple_text_parts():
+    config = EndpointConfig(**completions_config())
+    resp = GeminiAdapter.model_to_completions(_mixed_parts_response(_MULTI_TEXT_PARTS), config)
+
+    assert resp.choices[0].text == "Hello, world."
+    assert resp.choices[0].finish_reason == "stop"
+
+
+def test_gemini_completions_streaming_joins_multiple_text_parts():
+    config = EndpointConfig(**completions_config())
+    resp = GeminiAdapter.model_to_completions_streaming(
+        _mixed_parts_response(_MULTI_TEXT_PARTS), config
+    )
+
+    assert resp.choices[0].text == "Hello, world."
+
+
 def chat_stream_response():
     return [
         b'data: {"candidates":[{"content":{"parts":[{"text":"a"}]},"finishReason":null}],"'
