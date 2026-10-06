@@ -26,6 +26,7 @@ from mlflow.entities import (
 )
 from mlflow.entities.logged_model_output import LoggedModelOutput
 from mlflow.entities.logged_model_parameter import LoggedModelParameter
+from mlflow.entities.logged_model_status import LoggedModelStatus
 from mlflow.entities.logged_model_tag import LoggedModelTag
 from mlflow.entities.trace_info import TraceInfo
 from mlflow.entities.trace_state import TraceState
@@ -4077,6 +4078,48 @@ def test_search_logged_models_quoted_value_that_looks_like_a_tuple(store: SqlAlc
         experiment_ids=[exp_id], filter_string="params.shape IN ('(1, 2)', 'other')"
     )
     assert [m.model_id for m in models] == [model.model_id]
+
+
+@pytest.mark.parametrize(
+    ("filter_string", "expected_names"),
+    [
+        ("status = 'READY'", ["ready"]),
+        ("status = 'PENDING'", ["pending"]),
+        ("status != 'READY'", ["failed", "pending"]),
+        ("status IN ('READY', 'FAILED')", ["failed", "ready"]),
+        ("status NOT IN ('READY')", ["failed", "pending"]),
+        ("status = 'READY' AND name = 'ready'", ["ready"]),
+    ],
+)
+def test_search_logged_models_filter_by_status(
+    store: SqlAlchemyStore, filter_string: str, expected_names: list[str]
+):
+    exp_id = store.create_experiment(f"exp-{uuid.uuid4()}")
+    store.create_logged_model(experiment_id=exp_id, name="pending")
+    ready = store.create_logged_model(experiment_id=exp_id, name="ready")
+    store.finalize_logged_model(ready.model_id, LoggedModelStatus.READY)
+    failed = store.create_logged_model(experiment_id=exp_id, name="failed")
+    store.finalize_logged_model(failed.model_id, LoggedModelStatus.FAILED)
+
+    models = store.search_logged_models(experiment_ids=[exp_id], filter_string=filter_string)
+    assert sorted(m.name for m in models) == expected_names
+
+
+@pytest.mark.parametrize(
+    ("filter_string", "match"),
+    [
+        ("status = 'DONE'", "Invalid logged model status: 'DONE'"),
+        ("status IN ('READY', 'DONE')", "Invalid logged model status: 'DONE'"),
+        ("status LIKE 'READ%'", "Invalid comparison operator for logged model status"),
+    ],
+)
+def test_search_logged_models_filter_by_status_invalid(
+    store: SqlAlchemyStore, filter_string: str, match: str
+):
+    exp_id = store.create_experiment(f"exp-{uuid.uuid4()}")
+    with pytest.raises(MlflowException, match=re.escape(match)) as e:
+        store.search_logged_models(experiment_ids=[exp_id], filter_string=filter_string)
+    assert e.value.error_code == ErrorCode.Name(INVALID_PARAMETER_VALUE)
 
 
 def test_search_logged_models_invalid_operator_lists_applicable_operators(store: SqlAlchemyStore):

@@ -3708,7 +3708,10 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
         for comp in comparisons:
             comp_func = SearchUtils.get_sql_comparison_func(comp.op, dialect)
             if comp.entity.type == EntityType.ATTRIBUTE:
-                attr_filters.append(comp_func(getattr(SqlLoggedModel, comp.entity.key), comp.value))
+                value = comp.value
+                if comp.entity.key == "status":
+                    value = _logged_model_status_filter_value(comp.op, value)
+                attr_filters.append(comp_func(getattr(SqlLoggedModel, comp.entity.key), value))
             elif comp.entity.type == EntityType.METRIC:
                 has_metric_filters = True
                 metric_filters = [
@@ -10088,6 +10091,31 @@ def _get_sqlalchemy_filter_clauses(parsed, session, dialect):
                 )
 
     return attribute_filters, non_attribute_filters, dataset_filters
+
+
+def _logged_model_status_filter_value(op: str, value):
+    """
+    Converts status names in a logged model ``status`` filter (e.g. ``'READY'``) to the
+    integers stored in the ``status`` column.
+    """
+    if op not in ("=", "!=", "IN", "NOT IN"):
+        raise MlflowException.invalid_parameter_value(
+            f"Invalid comparison operator for logged model status: {op!r}. "
+            "Expected one of ('=', '!=', 'IN', 'NOT IN')."
+        )
+
+    def to_int(status):
+        try:
+            return LoggedModelStatus(status).to_int()
+        except ValueError:
+            valid = ", ".join(s.value for s in LoggedModelStatus)
+            raise MlflowException.invalid_parameter_value(
+                f"Invalid logged model status: {status!r}. Expected one of: {valid}."
+            )
+
+    if op in ("IN", "NOT IN"):
+        return tuple(to_int(v) for v in value)
+    return to_int(value)
 
 
 def _get_orderby_clauses(order_by_list, session):
