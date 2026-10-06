@@ -22,6 +22,7 @@ from mlflow.utils.proto_json_utils import (
     cast_df_types_according_to_schema,
     dataframe_from_parsed_json,
     dataframe_from_raw_json,
+    dump_input_data,
     message_to_json,
     parse_dict,
     parse_tf_serving_input,
@@ -709,3 +710,24 @@ def test_parse_tf_serving_input_for_dictionaries_and_lists_and_maps(data, schema
     pd.testing.assert_frame_equal(dataframe_from_parsed_json(df_split, "split", schema), df)
     df_records = df.to_dict(orient="records")
     pd.testing.assert_frame_equal(dataframe_from_parsed_json(df_records, "records", schema), df)
+
+
+@pytest.mark.parametrize(
+    ("data", "expected_inputs"),
+    [
+        ({"x": np.array([1, 2])}, {"x": [1, 2]}),
+        ({"col1": np.array([1.0]), "ab": np.array(["a", "b"])}, {"col1": [1.0], "ab": ["a", "b"]}),
+        ({"t": np.array([[1, 2], [3, 4]])}, {"t": [[1, 2], [3, 4]]}),
+    ],
+)
+def test_dump_input_data_dict(data, expected_inputs):
+    assert json.loads(dump_input_data(data)) == {"inputs": expected_inputs}
+    assert json.loads(dump_input_data(data, inputs_key="instances", params={"k": 1})) == {
+        "instances": expected_inputs,
+        "params": {"k": 1},
+    }
+
+
+def test_dump_input_data_dict_with_unsupported_value_type():
+    with pytest.raises(MlflowException, match="Incompatible input type:<class 'str'> for input x"):
+        dump_input_data({"x": "not an array"})
