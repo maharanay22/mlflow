@@ -193,6 +193,18 @@ def test_log_artifact(artifacts_server, tmp_path):
     assert read_file(dest_path) == "0"
 
 
+def test_log_artifact_with_hash_in_path_is_rejected(artifacts_server):
+    mlflow.set_tracking_uri(artifacts_server.url)
+
+    with mlflow.start_run() as run:
+        with pytest.raises(requests.HTTPError, match="Invalid path"):
+            mlflow.log_dict({"fold": 1}, "cv/fold#1.json")
+        with pytest.raises(requests.HTTPError, match="Invalid path"):
+            mlflow.log_dict({"fold": 2}, "cv/fold#2.json")
+
+    assert MlflowClient().list_artifacts(run.info.run_id) == []
+
+
 def test_log_artifacts(artifacts_server, tmp_path):
     url = artifacts_server.url
     mlflow.set_tracking_uri(url)

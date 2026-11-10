@@ -586,6 +586,36 @@ def test_download_file(http_artifact_repo, tmp_path, remote_file_path):
             http_artifact_repo._download_file(remote_file_path, tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("artifact_path", "expected_endpoint"),
+    [
+        ("cv/fold#1.json", "/cv/fold%231.json"),
+        ("trial?1/model.txt", "/trial%3F1/model.txt"),
+        ("cv/name%41.json", "/cv/name%2541.json"),
+    ],
+)
+def test_request_endpoints_quote_special_characters(
+    http_artifact_repo, tmp_path, artifact_path, expected_endpoint
+):
+    with mock.patch(
+        "mlflow.store.artifact.http_artifact_repo.http_request",
+        return_value=MockStreamResponse("data", 200),
+    ) as mock_request:
+        head, tail = posixpath.split(artifact_path)
+        local_file = tmp_path.joinpath("upload", tail)
+        local_file.parent.mkdir()
+        local_file.write_text("0")
+        http_artifact_repo.log_artifact(local_file, head)
+        http_artifact_repo._download_file(artifact_path, tmp_path.joinpath("downloaded"))
+        http_artifact_repo.delete_artifacts(artifact_path)
+
+    assert [c.args[1] for c in mock_request.call_args_list] == [expected_endpoint] * 3
+    _, mpu_endpoint = http_artifact_repo._construct_artifact_uri_and_path(
+        "/mlflow-artifacts/mpu/create", artifact_path
+    )
+    assert mpu_endpoint == f"/mlflow-artifacts/mpu/create{expected_endpoint}"
+
+
 def test_download_artifacts(http_artifact_repo, tmp_path):
     # This test simulates downloading artifacts in the following structure:
     # ---------
