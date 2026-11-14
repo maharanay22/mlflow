@@ -83,6 +83,17 @@ def test_compute_aggregated_metrics_custom_function():
     assert result["scorer/custom_count"] == pytest.approx(3)
 
 
+def test_compute_aggregated_metrics_skips_aggregations_with_invalid_metric_keys():
+    scorer = Scorer(name="scorer", aggregations=["mean", lambda x: sum(x)])
+    eval_results = [
+        EvalResult(eval_item=_EVAL_ITEM, assessments=[Feedback(name="scorer", value=0.8)]),
+        EvalResult(eval_item=_EVAL_ITEM, assessments=[Feedback(name="scorer", value=0.6)]),
+    ]
+    result = compute_aggregated_metrics(eval_results, [scorer])
+
+    assert result == {"scorer/mean": pytest.approx(0.7)}
+
+
 def test_compute_aggregated_metrics_empty():
     scorer = Scorer(name="scorer", aggregations=["mean"])
     eval_results = []
